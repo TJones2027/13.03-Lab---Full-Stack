@@ -1,40 +1,58 @@
 const express = require('express');
-const path = require('path');
-const createError = require('http-errors');
-const { dbMiddleware } = require('./bin/db');
+const router = express.Router();
 
-const indexRouter = require('./routes/index');
-
-const app = express();
-
-// View engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'pug');
-
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Attach DB connection to req
-app.use(dbMiddleware);
-
-// Main router
-app.use('/', indexRouter);
-
-// Catch 404 and forward to error handler
-app.use((req, res, next) => {
-  next(createError(404));
+// GET home page
+router.get('/', async (req, res) => {
+  const db = req.db;
+  const todos = await db.all("SELECT * FROM todos");
+  res.render("index", { title: "Todo List", todos });
 });
 
-// Error handler
-app.use((err, req, res, next) => {
-  res.locals.message = err.message;
-  res.locals.error =
-    req.app.get('env') === 'development' ? err : {};
+// CREATE a new task
+router.post('/create', async (req, res) => {
+  const db = req.db;
+  const { task } = req.body;
 
-  res.status(err.status || 500);
-  res.render('error');
+  await db.run("INSERT INTO todos(task, completed) VALUES(?, 0)", [task]);
+  res.redirect('/');
 });
 
-module.exports = app;
+// DELETE a task
+router.post('/delete', async (req, res) => {
+  const db = req.db;
+  const { id } = req.body;
+
+  await db.run("DELETE FROM todos WHERE id = ?", [id]);
+  res.redirect('/');
+});
+
+// MARK COMPLETE
+router.post('/complete/:id', async (req, res) => {
+  const db = req.db;
+  const id = req.params.id;
+
+  await db.run("UPDATE todos SET completed = 1 WHERE id = ?", [id]);
+  res.redirect('/');
+});
+
+// SHOW EDIT FORM
+router.get('/edit/:id', async (req, res) => {
+  const db = req.db;
+  const id = req.params.id;
+
+  const todo = await db.get("SELECT * FROM todos WHERE id = ?", [id]);
+
+  res.render('edit', { title: "Edit Task", todo });
+});
+
+// UPDATE TASK
+router.post('/update/:id', async (req, res) => {
+  const db = req.db;
+  const id = req.params.id;
+  const { task } = req.body;
+
+  await db.run("UPDATE todos SET task = ? WHERE id = ?", [task, id]);
+  res.redirect('/');
+});
+
+module.exports = router;
